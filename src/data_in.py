@@ -17,7 +17,7 @@ def encode_to_tfrecords(label_file, data_root, new_name='data.tfrecords', resize
             # print(l[0])
             image = cv2.imread(data_root + "/" + l[0])
             if resize is not None:
-                image = cv2.resize(image, resize)  # 为了
+                image = cv2.resize(image, resize)
             height, width, nchannel = image.shape
 
             label = int(l[1])
@@ -32,14 +32,14 @@ def encode_to_tfrecords(label_file, data_root, new_name='data.tfrecords', resize
             serialized = example.SerializeToString()
             writer.write(serialized)
             num_example += 1
-    print(label_file, "样本数据量：", num_example)
+    print(label_file, "Sample Data Cnt:", num_example)
     writer.close()
-# encode_to_tfrecords('../data/train/data.txt', '../data/train/') #   test OK!
 
-# 读取tfrecords文件
+
+# decode to tensor
 def decode_from_tfrecords(filename, num_epoch=None):
     filename_queue = tf.train.string_input_producer([filename],
-                                                    num_epochs=num_epoch)  # 因为有的训练数据过于庞大，被分成了很多个文件，所以第一个参数就是文件列表名参数
+                                                    num_epochs=num_epoch)
     reader = tf.TFRecordReader()
     _, serialized = reader.read(filename_queue)
     example = tf.parse_single_example(serialized, features={
@@ -59,86 +59,68 @@ def decode_from_tfrecords(filename, num_epoch=None):
     return image, label
 # images, labels = decode_from_tfrecords('../data/train/data.tfrecords')
 
-# 根据队列流数据格式，解压出一张图片后，输入一张图片，对其做预处理、及样本随机扩充
+
 def get_batch(image, label, batch_size, crop_size=None):
-    # 数据扩充变换
+    # function like 'const'
     distorted_image = image
     if crop_size is not None:
-        distorted_image = tf.random_crop(image, crop_size)  # 随机裁剪
-    distorted_image = tf.image.random_flip_up_down(distorted_image)  # 上下随机翻转
-    # distorted_image = tf.image.random_brightness(distorted_image,max_delta=63)#亮度变化
-    # distorted_image = tf.image.random_contrast(distorted_image,lower=0.2, upper=1.8)#对比度变化
+        distorted_image = tf.random_crop(image, [crop_size, crop_size, 3])  # random crop
+    distorted_image = tf.image.random_flip_up_down(distorted_image)  # random flip in vertical direction
+    # distorted_image = tf.image.random_brightness(distorted_image,max_delta=63)#brightness
+    # distorted_image = tf.image.random_contrast(distorted_image,lower=0.2, upper=1.8)#contrast
 
-    # 生成batch
-    # shuffle_batch的参数：capacity用于定义shuttle的范围，如果是对整个训练数据集，获取batch，那么capacity就应该够大
-    # 保证数据打的足够乱
+    # generate batch
+    # shuffle_batch：capacity defines range of shuffle
+    # capacity is the scale to shuffle batch_size images
     #images, label_batch = tf.train.shuffle_batch([distorted_image, label], batch_size=batch_size,
     #                                             num_threads=1, capacity=200, min_after_dequeue=50)
     images, label_batch = tf.train.shuffle_batch([distorted_image, label], batch_size=batch_size,
                                                  num_threads=1, capacity=10000, min_after_dequeue=500)
     # images, label_batch=tf.train.batch([distorted_image, label],batch_size=batch_size)
-
-
-
-    # 调试显示
     # tf.image_summary('images', images)
     return images, tf.reshape(label_batch, [batch_size])
 
 
 def get_none_crop_batch(image, label, batch_size):
-    # 数据扩充变换
-    distorted_image = tf.image.random_flip_up_down(image)  # 上下随机翻转
-    # distorted_image = tf.image.random_brightness(distorted_image,max_delta=63)#亮度变化
-    # distorted_image = tf.image.random_contrast(distorted_image,lower=0.2, upper=1.8)#对比度变化
-
-    # 生成batch
-    # shuffle_batch的参数：capacity用于定义shuttle的范围，如果是对整个训练数据集，获取batch，那么capacity就应该够大
-    # 保证数据打的足够乱
+    distorted_image = tf.image.random_flip_up_down(image)
     images, label_batch = tf.train.shuffle_batch_join([distorted_image, label], batch_size=batch_size,
                                                  capacity=150, min_after_dequeue=30)
-    # images, label_batch=tf.train.batch([distorted_image, label],batch_size=batch_size)
-
-
-
-    # 调试显示
     # tf.image_summary('images', images)
     return images, tf.reshape(label_batch, [batch_size])
 
 
-# 这个是用于测试阶段，使用的get_batch函数
 def get_test_batch(image, label, batch_size, crop_size):
-    # 数据扩充变换
-    #distorted_image = tf.image.central_crop(image, 39. / 45.)
-    distorted_image = tf.random_crop(image, [crop_size, crop_size, 3])  # 随机裁剪
+    distorted_image = tf.random_crop(image, [crop_size, crop_size, 3])
     images, label_batch = tf.train.shuffle_batch([distorted_image, label], batch_size=batch_size,capacity=150, min_after_dequeue=30)
     return images, tf.reshape(label_batch, [batch_size])
 
 
-# 测试上面的压缩、解压代码
 def test():
     encode_to_tfrecords("../data/train/data.txt", "../data/train")
-    image, label = decode_from_tfrecords('../data/train/data.tfrecords')
-    batch_image, batch_label = get_batch(image, label, 10, 400)  # batch 生成测试
+    image, label = decode_from_tfrecords('../data/train/spec/data.tfrecords')
+    batch_image, batch_label = get_batch(image, label, 10, 400)  # batch:10,crop:400x400
     init = tf.initialize_all_variables()
     with tf.Session() as session:
         session.run(init)
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
-        for l in range(1):  # 每run一次，就会指向下一个样本，一直循环
-            # image_np,label_np=session.run([image,label])#每调用run一次，那么
-            '''''cv2.imshow("temp",image_np)
-            cv2.waitKey()'''
+        for l in range(1):
+            # image_np,label_np=session.run([image,label])
+            # cv2.imshow("temp",image_np)
+            # cv2.waitKey()
             # print label_np
             # print image_np.shape
 
-
             batch_image_np, batch_label_np = session.run([batch_image, batch_label])
-            print(batch_label_np.shape)
-        coord.request_stop()  # queue需要关闭，否则报错
+            print(type(batch_image_np))
+            cv2.imshow("temp",batch_image_np[0])
+            cv2.waitKey()
+        coord.request_stop()  # queue should be closed
         coord.join(threads)
 #test()    #   test OK!
 
 if __name__ == '__main__':
     # encode_to_tfrecords('../data/train/data.txt', '../data/train/spec/')  # test OK!
-    images, labels = decode_from_tfrecords('../data/train/spec/data.tfrecords')
-    print(type(images),type(labels))
+    # images, labels = decode_from_tfrecords('../data/train/spec/data.tfrecords')
+    # print(type(images),type(labels))
+    test()
