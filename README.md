@@ -20,3 +20,10 @@ models： 模型存放目录
 pub：    共用文件
 
 src：    源码
+
+V1.2 Instruction:
+
+    1. 7 tfrecords data, image size: 600*800
+    2. random crop image into 100*100 (my GPU:940MX, GPU Mermory: 1GB)
+    3. tflearn have been used in this version
+    4. validation accuarcy is 0.5 or so
