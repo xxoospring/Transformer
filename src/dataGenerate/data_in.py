@@ -38,9 +38,18 @@ def encode(data_root, record_path, r_size=1000):
 
 
 # decode to tensor
-def decode_from_tfrecords(filename, image_size, num_epoch=None,):
-    filename_queue = tf.train.string_input_producer([filename],
-                                                    num_epochs=num_epoch)
+data_lst = [
+    '../../data/train/10000-20000.tfrecords',
+    '../../data/train/20000-30000.tfrecords',
+    '../../data/train/30000-40000.tfrecords',
+    '../../data/train/40000-50000.tfrecords',
+    '../../data/train/50000-60000.tfrecords',
+    '../../data/train/60000-70000.tfrecords'
+]
+
+
+def decode_from_tfrecords(data, num_epoch=None,):
+    filename_queue = tf.train.string_input_producer(data, num_epochs=num_epoch)
     reader = tf.TFRecordReader()
     _, serialized = reader.read(filename_queue)
     example = tf.parse_single_example(serialized, features={
@@ -55,41 +64,43 @@ def decode_from_tfrecords(filename, image_size, num_epoch=None,):
     #     tf.cast(example['nchannel'], tf.int32)]))
 
     # above 3 lines code equals to underline
-    image = tf.reshape(image, image_size)
+    image = tf.reshape(image, [800,600,1])
     return image, label
 
 
-def get_batch(images, labels, crop_size, batch_size=10, ):
-    ims = tf.random_crop(images, crop_size)
-    image, label = tf.train.shuffle_batch(
-        [ims, labels],
+def get_batch(image, label, crop_size, batch_size=10, ):
+    ims = tf.random_crop(image, crop_size)
+    image_single, label_single = tf.train.shuffle_batch(
+        [ims, label],
         batch_size=batch_size,
-        capacity=1000 + 3*batch_size,
-        min_after_dequeue=50
+        capacity=5000 + 3*batch_size,
+        min_after_dequeue=2000
     )
-    return image, tf.one_hot(label, 2)
+    return image_single, tf.one_hot(label_single, 2)
 
 
 def test():
-    encode('F:/DL/data/vpr_data/train/', './')
-    image, label = decode_from_tfrecords('./0-100.tfrecords')
-    batch_image, batch_label = get_batch(image, label, batch_size=50)  # batch:10
+    # encode('F:/DL/data/vpr_data/train/', './')
+    image, label = decode_from_tfrecords(data_lst)
+    batch_image, batch_label = get_batch(image, label,[100, 100, 1], batch_size=1000)  # batch:10
     init = tf.global_variables_initializer()
     with tf.Session() as session:
         # session.run(init)
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
-        for l in range(1):
-            batch_image_np, batch_label_np = session.run([batch_image, batch_label])
+        for l in range(100):
+            with tf.device('/gpu:0'):
+                batch_image_np, batch_label_np = session.run([batch_image, batch_label])
 
-            print(len(batch_image_np), len(batch_label_np))
-            print(batch_label_np)
+            # print(len(batch_image_np), len(batch_label_np))
+            # print(batch_label_np.shape)
+            print('step:%s,label:%s'%(l,batch_label_np[0]))
         coord.request_stop()  # queue should be closed
         coord.join(threads)
 
 if __name__ == '__main__':
-    # test()
-    # image, label = decode_from_tfrecords('./0-100.tfrecords')
-    # print(tf.shape(image))
-    encode('F:/DL/data/vpr_data/train/', '../../data/train/', r_size=10000)
+    test()
+    # encode('F:/DL/data/vpr_data/train/', '../../data/train/', r_size=10000)
+    # image, label = decode_from_tfrecords(data_lst[0])
+
     pass
