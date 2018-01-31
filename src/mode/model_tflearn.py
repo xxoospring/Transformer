@@ -36,16 +36,15 @@ net = regression(net, optimizer='sgd', loss='categorical_crossentropy', learning
 model = tflearn.DNN(net, tensorboard_verbose=0)
 
 
-image, label = decode_from_tfrecords(data_lst)
-batch_image_t, batch_label_t = get_batch(image, label, [100, 100, 1], batch_size=100)
+image, label = decode_from_tfrecords(data_lst,)
+batch_image_t, batch_label_t = get_batch(image, label, [100, 100, 1], batch_size=6000)
 with tf.Session() as sess:
-
+    sess.run(tf.global_variables_initializer())
+    sess.run(tf.local_variables_initializer())
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(coord=coord)
-    for _ in range(100):
-
-        batch_image, batch_label = sess.run([batch_image_t, batch_label_t])
-        model.fit(batch_image, batch_label, n_epoch=1, validation_set=[batch_image, batch_label],show_metric=True,batch_size=5,)
-
+    batch_image, batch_label = sess.run([batch_image_t, batch_label_t])
+    model.fit(batch_image, batch_label,n_epoch=10, validation_set=[batch_image, batch_label],show_metric=True,batch_size=50,)
+    print('*************%s***************')
     coord.request_stop()  # queue should be closed
     coord.join(threads)

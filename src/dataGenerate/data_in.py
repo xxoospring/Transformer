@@ -74,7 +74,8 @@ def get_batch(image, label, crop_size, batch_size=10, ):
         [ims, label],
         batch_size=batch_size,
         capacity=5000 + 3*batch_size,
-        min_after_dequeue=2000
+        min_after_dequeue=2000,
+        allow_smaller_final_batch=True,
     )
     return image_single, tf.one_hot(label_single, 2)
 
@@ -82,19 +83,18 @@ def get_batch(image, label, crop_size, batch_size=10, ):
 def test():
     # encode('F:/DL/data/vpr_data/train/', './')
     image, label = decode_from_tfrecords(data_lst)
-    batch_image, batch_label = get_batch(image, label,[100, 100, 1], batch_size=1000)  # batch:10
+    batch_image, batch_label = get_batch(image, label,[100, 100, 1], batch_size=500)  # batch:10
     init = tf.global_variables_initializer()
     with tf.Session() as session:
         # session.run(init)
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
         for l in range(100):
-            with tf.device('/gpu:0'):
-                batch_image_np, batch_label_np = session.run([batch_image, batch_label])
+            batch_image_np, batch_label_np = session.run([batch_image, batch_label])
 
             # print(len(batch_image_np), len(batch_label_np))
-            # print(batch_label_np.shape)
-            print('step:%s,label:%s'%(l,batch_label_np[0]))
+            print(batch_image_np.shape)
+            # print('step:%s,label:%s'%(l,batch_label_np[0]))
         coord.request_stop()  # queue should be closed
         coord.join(threads)
 
